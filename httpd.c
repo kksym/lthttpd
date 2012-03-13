@@ -3,15 +3,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <lthread.h>
-
-// https://github.com/halayli/lthread
-
-#define PORTNO 5002
+#include <unistd.h>
+#include <arpa/inet.h>
 
 typedef struct client_t {
     struct sockaddr_in addr;
     int fd;
 } client_t;
+
+static int port = 80;
+static int verbose = 0;
+static char fdir[127] = "./files";
 
 char reply[] = "HTTP/1.0 200 OK\r\nContent-length: 5\r\n\r\nPong!\r\n";
 
@@ -51,18 +53,18 @@ void listener(lthread_t* lt, void* arg)
     struct sockaddr_in sin;
     sin.sin_family = PF_INET;
     sin.sin_addr.s_addr = INADDR_ANY;
-    sin.sin_port = htons(PORTNO);
+    sin.sin_port = htons(port);
 
     int ret = bind(listenfd, (struct sockaddr*)&sin, sizeof(sin));
     if (ret == -1)
     {
-        printf("bind to port %d failed\n", PORTNO);
+        printf("bind to port %d failed\n", port);
         return;
     }
 
     listen(listenfd, 128);
 
-    printf("listening on port %d\n", PORTNO);
+    printf("listening on port %d\n", port);
 
     lthread_t* c_thread = NULL;
 
@@ -84,12 +86,29 @@ void listener(lthread_t* lt, void* arg)
 
 int main(int argc, char** argv)
 {
+    int c = 0;
+    opterr = 0;
+
+    while ((c = getopt(argc, argv, "vp:d:")) != -1)
+    {
+        switch (c)
+        {
+            case 'v':
+                verbose = 1;
+                break;
+            case 'p':
+                port = atoi(optarg);
+                break;
+            case 'd':
+                strncpy(fdir, optarg, 127);
+                break;
+        }
+    }
+
     lthread_t* lt;
     lthread_create(&lt, listener, NULL);
 
     lthread_run();
-
-    lthread_destroy(lt);
 
     return 0;
 }
