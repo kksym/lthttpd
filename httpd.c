@@ -17,20 +17,71 @@ static char fdir[127] = "./files";
 
 char reply[] = "HTTP/1.0 200 OK\r\nContent-length: 5\r\n\r\nPong!\r\n";
 
+void buildresponse(char* dst, char* src, size_t len)
+{
+    sprintf(dst, "HTTP/1.0 200 OK\r\nContent-length: %u\r\n\r\n%s\r\n", len, src);
+}
+
+int parse_request(char* req, char* type, char* path, char* httpvers, char* host)
+{
+    // TODO: de-uglify this
+    return sscanf(req, "%15[^ ] %255[^ ] %31[^\r\n] Host: %255[^\r\n]", type, path, httpvers, host) == 4;
+}
+
 void serve(lthread_t* lt, void* arg)
 {
     lthread_detach();
     client_t* client = (client_t*)arg;
-    char buf[1024];
+    char ibuf[1024];
+    char obuf[1024];
+    size_t flen;
+
+    char type[16];
+    char path[128];
+    char httpvers[32];
+    char host[256];
+
     int ret = 0;
 
     char ipstr[INET6_ADDRSTRLEN];
+
     inet_ntop(AF_INET, &client->addr.sin_addr, ipstr, INET_ADDRSTRLEN);
 
-    ret = lthread_recv(client->fd, buf, 1024, 0, 5000);
+    ret = lthread_recv(client->fd, ibuf, 1024, 0, 5000);
+
+
+    if (parse_request(ibuf, type, path, httpvers, host))
+    {
+        printf("%s | %s %s\n", ipstr, type, path);
+        char fullp[256];
+        sprintf(fullp, "%s%s", fdir, path);
+        FILE* file = fopen(fullp, "r");
+        if (!file)
+        {
+            printf("problem serving %s\n", path);
+        }
+        else
+        {
+            fseek(file, 0, SEEK_END);
+            flen = ftell(file);
+            fseek(file, 0, SEEK_SET);
+            char* recvbuf = calloc(flen, 1);
+            char* ptr = recvbuf;
+            while (!feof(file))
+            {
+                *ptr = fgetc(file);
+                ptr++;
+
+            }
+            buildresponse(obuf, recvbuf, flen);
+            puts(obuf);
+            printf("obuf[%d] [%d]\n", strlen(obuf), flen);
+        }
+    }
 
     if (ret != -2)
-        lthread_send(client->fd, reply, strlen(reply), 0);
+        lthread_send(client->fd, obuf, strlen(obuf) - 1, 0);
+
 
     lthread_close(client->fd);
     free(arg);
@@ -48,7 +99,7 @@ void listener(lthread_t* lt, void* arg)
     int opt = 1;
     
     if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int)) == -1)
-        perror("failed to set SOREUSEADDR on socket");
+        perror("failed to set SO_REUSEADDR on socket");
 
     struct sockaddr_in sin;
     sin.sin_family = PF_INET;
