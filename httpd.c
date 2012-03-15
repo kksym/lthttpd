@@ -55,7 +55,7 @@ void serve(lthread_t* lt, void* arg)
         printf("%s | %s %s\n", ipstr, type, path);
         char fullp[256];
         sprintf(fullp, "%s%s", fdir, path);
-        FILE* file = fopen(fullp, "r");
+        FILE* file = fopen(fullp, "rb");
         if (!file)
         {
             printf("problem serving %s\n", path);
@@ -63,24 +63,18 @@ void serve(lthread_t* lt, void* arg)
         else
         {
             fseek(file, 0, SEEK_END);
-            flen = ftell(file);
-            fseek(file, 0, SEEK_SET);
-            char* recvbuf = calloc(flen, 1);
-            char* ptr = recvbuf;
-            while (!feof(file))
-            {
-                *ptr = fgetc(file);
-                ptr++;
+            size_t flen = ftell(file);
+            rewind(file);
+            char* fbuf = calloc(flen, 1);
+            fread(fbuf, 1, flen, file);
+            
+            buildresponse(obuf, fbuf, flen);
 
-            }
-            buildresponse(obuf, recvbuf, flen);
-            puts(obuf);
-            printf("obuf[%d] [%d]\n", strlen(obuf), flen);
         }
     }
 
     if (ret != -2)
-        lthread_send(client->fd, obuf, strlen(obuf) - 1, 0);
+        lthread_send(client->fd, obuf, strlen(obuf), 0);
 
 
     lthread_close(client->fd);
