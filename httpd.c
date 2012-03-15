@@ -49,9 +49,10 @@ void serve(lthread_t* lt, void* arg)
 
     ret = lthread_recv(client->fd, ibuf, 1024, 0, 5000);
 
-
     if (parse_request(ibuf, type, path, httpvers, host))
     {
+        if (strcmp(path, "/") == 0)
+            strcat(path, "index.html");
         printf("%s | %s %s\n", ipstr, type, path);
         char fullp[256];
         sprintf(fullp, "%s%s", fdir, path);
