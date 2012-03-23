@@ -15,8 +15,6 @@ static int port = 80;
 static int verbose = 0;
 static char fdir[127] = "./files";
 
-char reply[] = "HTTP/1.0 200 OK\r\nContent-length: 5\r\n\r\nPong!\r\n";
-
 void buildresponse(char* dst, char* src, size_t len)
 {
     sprintf(dst, "HTTP/1.0 200 OK\r\nContent-length: %u\r\n\r\n%s\r\n", len, src);
@@ -53,29 +51,34 @@ void serve(lthread_t* lt, void* arg)
     {
         if (strcmp(path, "/") == 0)
             strcat(path, "index.html");
-        printf("%s | %s %s\n", ipstr, type, path);
+        
         char fullp[256];
         sprintf(fullp, "%s%s", fdir, path);
+
         FILE* file = fopen(fullp, "rb");
         if (!file)
         {
-            printf("problem serving %s\n", path);
+            sprintf(obuf, "HTTP/1.0 404 Not Found\r\nContent-Length: 3\r\n\r\n404\r\n");
+            printf("[404]");
         }
         else
         {
+            printf("[200]");
             fseek(file, 0, SEEK_END);
             size_t flen = ftell(file);
             rewind(file);
             char* fbuf = calloc(flen, 1);
             fread(fbuf, 1, flen, file);
-            
+                
             buildresponse(obuf, fbuf, flen);
-
         }
     }
 
     if (ret != -2)
+    {
+        printf(" %s | %s %s\n", ipstr, type, path);
         lthread_send(client->fd, obuf, strlen(obuf), 0);
+    }
 
 
     lthread_close(client->fd);
@@ -104,13 +107,13 @@ void listener(lthread_t* lt, void* arg)
     int ret = bind(listenfd, (struct sockaddr*)&sin, sizeof(sin));
     if (ret == -1)
     {
-        printf("bind to port %d failed\n", port);
+        printf("Bind to port %d failed\n", port);
         return;
     }
 
     listen(listenfd, 128);
 
-    printf("listening on port %d\n", port);
+    printf("Listening on port %d\n\n", port);
 
     lthread_t* c_thread = NULL;
 
